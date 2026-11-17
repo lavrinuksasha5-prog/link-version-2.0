@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Link Manager 2</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root { --bg: var(--tg-theme-bg-color, #121212); --card: var(--tg-theme-secondary-bg-color, #1e1e1e); --text: var(--tg-theme-text-color, #fff); --hint: var(--tg-theme-hint-color, #888); --btn: var(--tg-theme-button-color, #2ea6ff); --success: #2ecc71; }
+        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 16px; padding-bottom: 80px; }
+        .tabs { display: flex; background: var(--card); border-radius: 12px; padding: 4px; margin-bottom: 20px; overflow-x: auto; }
+        .tab { flex: 1; text-align: center; padding: 10px; font-weight: 600; font-size: 13px; border-radius: 8px; cursor: pointer; color: var(--hint); white-space: nowrap; }
+        .tab.active { background: var(--btn); color: #fff; }
+        .tab-content { display: none; } .tab-content.active { display: block; }
+        
+        textarea, input[type="text"], input[type="number"] { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--card); background: var(--card); color: var(--text); font-size: 14px; box-sizing: border-box; margin-bottom: 8px; }
+        textarea { min-height: 80px; font-family: monospace; resize: vertical; }
+        
+        .btn-create { width: 100%; padding: 14px; background: var(--btn); color: #fff; border: none; border-radius: 12px; font-weight: 700; font-size: 16px; margin-top: 10px; cursor: pointer; }
+        
+        #progress-area { display: none; margin-top: 20px; background: var(--card); padding: 16px; border-radius: 16px; border: 1px solid #333; }
+        .progress-header { display: flex; justify-content: space-between; font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+        .progress-bar { height: 12px; background: rgba(255,255,255,0.1); border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+        .progress-fill { height: 100%; background: var(--btn); width: 0%; transition: width 0.3s; }
+        .progress-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+        .progress-item { display: flex; justify-content: space-between; font-size: 12px; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,0.05); }
+        .progress-item.done { color: var(--success); } .progress-item.active { color: var(--btn); font-weight: bold; }
+        
+        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .card { background: var(--card); border-radius: 16px; padding: 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 10px; border: 2px solid transparent; transition: border-color 0.2s; }
+        .card.selected { border-color: var(--btn); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+        .name-container { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+        .checkbox { width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--hint); display: none; align-items: center; justify-content: center; flex-shrink: 0; }
+        .checkbox.active { display: flex; } .checkbox.checked { background: var(--btn); border-color: var(--btn); }
+        .checkbox.checked::after { content: ''; width: 6px; height: 12px; border: solid white; border-width: 0 2px 2px 0; transform: rotate(45deg); margin-bottom: 3px; }
+        .name-box { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; font-weight: 700; font-size: 14px; padding: 4px 8px; border-radius: 8px; word-break: break-word; line-height: 1.2; }
+        .stats { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+        .req { color: #f39c12; } .join { color: var(--success); }
+        .actions { display: flex; gap: 8px; } .actions.hidden { display: none; }
+        .btn { flex: 1; padding: 10px; border-radius: 10px; border: none; font-weight: 600; font-size: 14px; cursor: pointer; }
+        .btn-copy { background: var(--btn); color: #fff; } .btn-delete { background: rgba(231, 76, 60, 0.15); color: #e74c3c; }
+        .bottom-panel { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); padding: 16px; display: none; z-index: 100; }
+        .bottom-panel.active { display: flex; }
+        .btn-delete-all { background: #e74c3c; color: #fff; padding: 12px; border-radius: 12px; border: none; font-weight: 700; width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('stats')">📊 Стат-ка</div>
+        <div class="tab" onclick="switchTab('create')">➕ Создать</div>
+        <div class="tab" onclick="switchTab('report')">📅 Отчет</div>
+        <div class="tab" onclick="switchTab('unique')">✨ Фото</div>
+    </div>
+
+    <div id="tab-stats" class="tab-content active">
+        <div style="display: flex; gap: 8px; margin-bottom: 20px;">
+            <div style="flex: 1; background: var(--card); padding: 12px 8px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 22px; font-weight: 800; color: var(--btn);" id="total-requests">0</div>
+                <div style="font-size: 11px; color: var(--hint); margin-top: 4px;">Всего заявок</div>
+            </div>
+            <div style="flex: 1; background: var(--card); padding: 12px 8px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 22px; font-weight: 800; color: var(--success);" id="today-requests">0</div>
+                <div style="font-size: 11px; color: var(--hint); margin-top: 4px;">Сегодня запуск</div>
+            </div>
+            <div style="flex: 1; background: var(--card); padding: 12px 8px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+                <div style="font-size: 22px; font-weight: 800; color: #f39c12;" id="yesterday-requests">0</div>
+                <div style="font-size: 11px; color: var(--hint); margin-top: 4px;">Вчера запуск</div>
+            </div>
+        </div>
+        <div class="header-container">
+            <div style="font-size: 20px; font-weight: 700;">Ссылки</div>
+            <button style="background: transparent; color: var(--btn); border: none; font-size: 16px; font-weight: 600;" id="btn-edit" onclick="toggleEditMode()">Выбрать</button>
+        </div>
+        <div id="list">Загрузка...</div>
+    </div>
+
+    <div id="tab-create" class="tab-content">
+        <div style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">Новые ссылки</div>
+        <textarea id="create-input" placeholder="Джо 3&#10;Tema Alt 2"></textarea>
+        <button class="btn-create" onclick="startCreation()">🚀 Создать ссылки</button>
+        <div id="progress-area">
+            <div class="progress-header"><span>Создание</span><span id="progress-percent">0%</span></div>
+            <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            <div class="progress-list" id="progress-list"></div>
+        </div>
+    </div>
+
+    <div id="tab-report" class="tab-content">
+        <div style="font-size: 20px; font-weight: 700; margin-bottom: 20px; text-align: center;">История заявок</div>
+        <div id="report-list">Загрузка...</div>
+    </div>
+
+    <div id="tab-unique" class="tab-content">
+        <div style="font-size: 20px; font-weight: 700; margin-bottom: 20px; text-align: center;">Уникализация фото</div>
+        <div style="background: var(--card); border-radius: 20px; padding: 24px; text-align: center; border: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 48px; margin-bottom: 16px;">🖼️</div>
+            <div style="font-size: 14px; color: var(--hint); margin-bottom: 20px;">
+                Чтобы уникализировать фото, отправь его в чат боту и в подписи напиши:<br><br>
+                <b style="color: var(--btn); font-size: 16px;">Название 50</b><br>
+                (где 50 — количество копий)
+            </div>
+            <button class="btn-create" onclick="tg.close()">Понятно, в чат</button>
+        </div>
+    </div>
+
+    <div class="bottom-panel" id="bottom-panel">
+        <button class="btn-delete-all" id="btn-delete-all" onclick="deleteSelected()">Удалить (0)</button>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp; tg.expand();
+        // ССЫЛКА НА НОВЫЙ СЕРВЕР RAILWAY УЖЕ ВСТАВЛЕНА
+        const API_URL = "https://worker-production-28327ca4.up.railway.app"; 
+        let isEditMode = false, selectedItems = new Set(), currentData = [];
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'stats') { document.querySelectorAll('.tab')[0].classList.add('active'); document.getElementById('tab-stats').classList.add('active'); fetchStats(); fetchDashboard(); }
+            else if (tab === 'create') { document.querySelectorAll('.tab')[1].classList.add('active'); document.getElementById('tab-create').classList.add('active'); document.getElementById('bottom-panel').classList.remove('active'); }
+            else if (tab === 'report') { document.querySelectorAll('.tab')[2].classList.add('active'); document.getElementById('tab-report').classList.add('active'); fetchReport(); }
+            else if (tab === 'unique') { document.querySelectorAll('.tab')[3].classList.add('active'); document.getElementById('tab-unique').classList.add('active'); }
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch(`${API_URL}/api/stats`);
+                if (!res.ok) throw new Error();
+                currentData = await res.json(); renderList();
+            } catch (e) { document.getElementById('list').innerHTML = "<div style='text-align:center; padding:20px; color:var(--hint);'>Ошибка связи</div>"; }
+        }
+
+        function renderList() {
+            const listEl = document.getElementById('list');
+            if (currentData.length === 0) { listEl.innerHTML = "<div style='text-align:center; padding:20px; color:var(--hint);'>Пока нет данных</div>"; return; }
+            currentData.sort((a, b) => b.requests - a.requests);
+            
+            listEl.innerHTML = currentData.map(item => {
+                const isSel = selectedItems.has(item.name);
+                let displayName = item.name;
+                try { displayName = decodeURIComponent(escape(item.name)); } catch(e) {}
+
+                return `
+                    <div class="card ${isSel ? 'selected' : ''}" onclick="handleCardClick(event, '${item.name}')">
+                        <div class="card-header">
+                            <div class="name-container">
+                                <div class="checkbox ${isEditMode ? 'active' : ''} ${isSel ? 'checked' : ''}"></div>
+                                <div class="name-box">${displayName}</div>
+                            </div>
+                            <div class="stats"><span class="req">Заявки: ${item.requests}</span><span class="join">Вступили: ${item.joins}</span></div>
+                        </div>
+                        <div style="font-size: 12px; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${item.url || 'Ссылка не найдена'}</div>
+                        <div class="actions ${isEditMode ? 'hidden' : ''}">
+                            <button class="btn btn-copy" onclick="event.stopPropagation(); copyLink('${item.url}')">Скопировать</button>
+                            <button class="btn btn-delete" onclick="event.stopPropagation(); deleteSingle('${item.name}')">Удалить</button>
+                        </div>
+                    </div>`;
+            }).join("");
+        }
+
+        async function fetchDashboard() {
+            try {
+                const res = await fetch(`${API_URL}/api/dashboard`);
+                const data = await res.json();
+                document.getElementById('total-requests').innerText = data.total_requests;
+                document.getElementById('today-requests').innerText = data.today_requests;
+                document.getElementById('yesterday-requests').innerText = data.yesterday_requests;
+            } catch (e) {}
+        }
+
+        async function fetchReport() {
+            try {
+                const res = await fetch(`${API_URL}/api/daily_report`);
+                const data = await res.json();
+                const listEl = document.getElementById('report-list');
+                if (!data.history || data.history.length === 0) { listEl.innerHTML = "<div style='text-align:center; padding:20px; color:var(--hint);'>Нет данных</div>"; return; }
+                let html = "";
+                data.history.forEach(cycle => {
+                    const totalColor = cycle.total > 0 ? "var(--btn)" : "var(--hint)";
+                    html += `<div style="background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
+                            <div style="font-size: 14px; font-weight: 600; color: var(--hint);">${cycle.period}</div>
+                            <div style="font-size: 18px; font-weight: 800; color: ${totalColor};">${cycle.total} заявок</div>
+                        </div><div style="display: flex; flex-direction: column; gap: 6px;">`;
+                    if (cycle.details.length === 0) { html += `<div style="font-size: 13px; color: var(--hint); font-style: italic;">Нет заявок за этот цикл</div>`; } 
+                    else {
+                        cycle.details.forEach(item => {
+                            html += `<div style="display: flex; justify-content: space-between; font-size: 13px;"><div style="color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">${item.link}</div><div style="font-weight: 700; color: var(--success);">+${item.count}</div></div>`;
+                        });
+                    }
+                    html += `</div></div>`;
+                });
+                listEl.innerHTML = html;
+            } catch (e) {}
+        }
+
+        async function startCreation() {
+            const text = document.getElementById('create-input').value.trim();
+            if (!text) return tg.showAlert("Введи список");
+            const lines = text.split('\n').filter(l => l.trim());
+            const tasks = [];
+            for (let line of lines) {
+                const match = line.match(/^(.+?)\s+(\d+)$/);
+                if (match) tasks.push({ name: match[1].trim(), count: parseInt(match[2]) });
+            }
+            if (tasks.length === 0) return tg.showAlert("Неверный формат");
+
+            document.getElementById('progress-area').style.display = 'block';
+            document.getElementById('progress-fill').style.width = '0%';
+            document.getElementById('progress-percent').innerText = '0%';
+            
+            let totalLinks = tasks.reduce((sum, t) => sum + t.count, 0);
+            let createdLinks = 0;
+            let listHtml = '';
+            tasks.forEach(t => { listHtml += `<div class="progress-item" id="task-${t.name}"><span>${t.name}</span><span>0/${t.count}</span></div>`; });
+            document.getElementById('progress-list').innerHTML = listHtml;
+
+            for (let task of tasks) {
+                const taskEl = document.getElementById(`task-${task.name}`);
+                if (taskEl) { taskEl.classList.add('active'); taskEl.style.color = 'var(--btn)'; taskEl.style.fontWeight = 'bold'; }
+
+                for (let i = 1; i <= task.count; i++) {
+                    try {
+                        const response = await fetch(`${API_URL}/api/create_single`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: task.name, index: i, count: task.count })
+                        });
+                        const result = await response.json();
+                        if (result.status === 'ok') {
+                            createdLinks++;
+                            const percent = Math.round((createdLinks / totalLinks) * 100);
+                            document.getElementById('progress-percent').innerText = percent + '%';
+                            document.getElementById('progress-fill').style.width = percent + '%';
+                            if (taskEl) taskEl.innerHTML = `<span>${task.name}</span><span>${i}/${task.count} ✅</span>`;
+                        }
+                    } catch (e) { console.error(e); }
+                }
+                if (taskEl) { taskEl.classList.remove('active'); taskEl.classList.add('done'); taskEl.style.color = 'var(--success)'; }
+            }
+            tg.showAlert("Все ссылки созданы!");
+            document.getElementById('create-input').value = '';
+            setTimeout(() => { document.getElementById('progress-area').style.display = 'none'; }, 3000);
+            fetchStats(); fetchDashboard();
+        }
+
+        function toggleEditMode() {
+            isEditMode = !isEditMode;
+            document.getElementById('btn-edit').innerText = isEditMode ? 'Отмена' : 'Выбрать';
+            document.getElementById('bottom-panel').classList.toggle('active', isEditMode);
+            if (!isEditMode) selectedItems.clear();
+            updateDeleteButton(); renderList();
+        }
+
+        function handleCardClick(event, name) {
+            if (!isEditMode) return;
+            if (selectedItems.has(name)) selectedItems.delete(name);
+            else selectedItems.add(name);
+            updateDeleteButton(); renderList();
+        }
+
+        function updateDeleteButton() { document.getElementById('btn-delete-all').innerText = `Удалить выбранные (${selectedItems.size})`; }
+
+        async function deleteSelected() {
+            if (selectedItems.size === 0) return;
+            if (!confirm(`Удалить ${selectedItems.size} ссылок?`)) return;
+            document.getElementById('btn-delete-all').innerText = "Удаляю...";
+            try {
+                const res = await fetch(`${API_URL}/api/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ names: Array.from(selectedItems) })
+                });
+                const result = await res.json();
+                if (result.status === 'ok') {
+                    tg.showAlert(`Удалено: ${result.deleted}`);
+                    selectedItems.clear(); isEditMode = false;
+                    document.getElementById('btn-edit').innerText = 'Выбрать';
+                    document.getElementById('bottom-panel').classList.remove('active');
+                    fetchStats(); fetchDashboard();
+                }
+            } catch (e) { tg.showAlert("Ошибка сети"); }
+            updateDeleteButton();
+        }
+
+        async function deleteSingle(name) {
+            if (!confirm(`Удалить ${name}?`)) return;
+            try {
+                const res = await fetch(`${API_URL}/api/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ names: [name] })
+                });
+                if (res.ok) { tg.showAlert("Ссылка удалена"); fetchStats(); fetchDashboard(); }
+            } catch (e) { tg.showAlert("Ошибка сети"); }
+        }
+
+        function copyLink(url) {
+            if (!url) return tg.showAlert("Ссылка не найдена");
+            navigator.clipboard.writeText(url).then(() => tg.showAlert("Ссылка скопирована!"));
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchStats(); fetchDashboard();
+            setInterval(() => { fetchStats(); fetchDashboard(); }, 5000);
+        });
+    </script>
+</body>
+</html>
